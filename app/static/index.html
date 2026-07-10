@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ParserDoc Test Panel</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f7fb;
+        --panel: #ffffff;
+        --line: #d9deea;
+        --text: #162033;
+        --muted: #5f6b85;
+        --accent: #2563eb;
+        --accent-dark: #1d4ed8;
+        --danger: #b42318;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      main {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 24px;
+        line-height: 1.2;
+      }
+
+      p {
+        margin: 0 0 16px;
+        color: var(--muted);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 360px 1fr;
+        gap: 16px;
+        align-items: start;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 16px;
+      }
+
+      label {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        margin: 14px 0 6px;
+      }
+
+      input[type="text"], select, textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font: inherit;
+        background: #fff;
+        color: var(--text);
+      }
+
+      input[type="file"] {
+        width: 100%;
+      }
+
+      textarea {
+        min-height: 420px;
+        resize: vertical;
+        white-space: pre-wrap;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 16px;
+      }
+
+      button {
+        border: 0;
+        border-radius: 8px;
+        background: var(--accent);
+        color: white;
+        padding: 10px 14px;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      button:hover { background: var(--accent-dark); }
+      button.secondary {
+        background: #e8edf7;
+        color: var(--text);
+      }
+      button.secondary:hover { background: #dfe6f4; }
+
+      .hint {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 6px;
+      }
+
+      .status {
+        margin-top: 14px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .status.error { color: var(--danger); }
+
+      .meta {
+        display: grid;
+        gap: 6px;
+        margin-top: 12px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .meta strong {
+        color: var(--text);
+        font-weight: 600;
+      }
+
+      @media (max-width: 920px) {
+        .grid { grid-template-columns: 1fr; }
+        textarea { min-height: 320px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>ParserDoc test panel</h1>
+      <p>Загрузи документ, отправь его на локальный API и посмотри результат парсинга прямо на экране.</p>
+
+      <div class="grid">
+        <section class="panel">
+          <label for="mode">Режим отправки</label>
+          <select id="mode">
+            <option value="multipart">multipart / parse</option>
+            <option value="raw">raw binary / parse/raw</option>
+          </select>
+
+          <label for="file">Файл</label>
+          <input id="file" type="file" />
+          <div class="hint">Подойдут PDF, DOCX, DOC, RTF, XLS, TXT и другие поддержанные форматы.</div>
+
+          <div class="row" id="rawFields" style="display:none;">
+            <div>
+              <label for="filename">Filename</label>
+              <input id="filename" type="text" placeholder="document.pdf" />
+            </div>
+            <div>
+              <label for="mimeType">MIME type</label>
+              <input id="mimeType" type="text" placeholder="application/pdf" />
+            </div>
+          </div>
+
+          <div class="actions">
+            <button id="sendBtn" type="button">Отправить</button>
+            <button id="clearBtn" class="secondary" type="button">Очистить</button>
+          </div>
+
+          <div id="status" class="status">Ожидание файла.</div>
+
+          <div class="meta" id="meta"></div>
+        </section>
+
+        <section class="panel">
+          <label for="output">Ответ сервера</label>
+          <textarea id="output" readonly placeholder="Здесь появится JSON-ответ от сервиса..."></textarea>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      const mode = document.getElementById('mode');
+      const fileInput = document.getElementById('file');
+      const filenameInput = document.getElementById('filename');
+      const mimeTypeInput = document.getElementById('mimeType');
+      const rawFields = document.getElementById('rawFields');
+      const sendBtn = document.getElementById('sendBtn');
+      const clearBtn = document.getElementById('clearBtn');
+      const statusEl = document.getElementById('status');
+      const outputEl = document.getElementById('output');
+      const metaEl = document.getElementById('meta');
+
+      function setStatus(text, error = false) {
+        statusEl.textContent = text;
+        statusEl.classList.toggle('error', error);
+      }
+
+      function updateMode() {
+        rawFields.style.display = mode.value === 'raw' ? 'grid' : 'none';
+      }
+
+      function clearOutput() {
+        outputEl.value = '';
+        metaEl.innerHTML = '';
+        setStatus('Ожидание файла.');
+      }
+
+      mode.addEventListener('change', updateMode);
+      clearBtn.addEventListener('click', () => {
+        fileInput.value = '';
+        filenameInput.value = '';
+        mimeTypeInput.value = '';
+        clearOutput();
+      });
+
+      sendBtn.addEventListener('click', async () => {
+        const file = fileInput.files[0];
+        if (!file) {
+          setStatus('Сначала выбери файл.', true);
+          return;
+        }
+
+        sendBtn.disabled = true;
+        setStatus('Отправка и обработка...');
+        outputEl.value = '';
+        metaEl.innerHTML = '';
+
+        try {
+          let response;
+          if (mode.value === 'raw') {
+            const url = new URL('/parse/raw', window.location.origin);
+            url.searchParams.set('filename', filenameInput.value || file.name);
+            if (mimeTypeInput.value) {
+              url.searchParams.set('mime_type', mimeTypeInput.value);
+            }
+
+            const body = await file.arrayBuffer();
+            response = await fetch(url.toString(), {
+              method: 'POST',
+              headers: {
+                'Content-Type': mimeTypeInput.value || file.type || 'application/octet-stream',
+              },
+              body,
+            });
+          } else {
+            const form = new FormData();
+            form.append('file', file);
+            response = await fetch('/parse', {
+              method: 'POST',
+              body: form,
+            });
+          }
+
+          const data = await response.json();
+          outputEl.value = JSON.stringify(data, null, 2);
+
+          if (!response.ok) {
+            setStatus(data.detail || data.error || 'Ошибка обработки.', true);
+          } else {
+            setStatus('Файл успешно обработан.');
+          }
+
+          metaEl.innerHTML = `
+            <div><strong>HTTP статус:</strong> ${response.status}</div>
+            <div><strong>Имя файла:</strong> ${data.filename || file.name}</div>
+            <div><strong>Тип:</strong> ${data.source_type || 'n/a'}</div>
+            <div><strong>Символов:</strong> ${data.characters ?? 'n/a'}</div>
+          `;
+        } catch (error) {
+          setStatus(error.message || 'Не удалось отправить файл.', true);
+          outputEl.value = String(error.stack || error);
+        } finally {
+          sendBtn.disabled = false;
+        }
+      });
+
+      updateMode();
+    </script>
+  </body>
+</html>
