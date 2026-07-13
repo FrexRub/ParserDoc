@@ -1,0 +1,17 @@
+/.gitattributes text eol=lf
+
+*.py text eol=lf
+*.md text eol=lf
+*.html text eol=lf
+*.toml text eol=lf
+*.txt text eol=lf
+*.json text eol=lf
+*.xml text eol=lf
+*.csv text eol=lf
+
+*.pdf binary
+*.doc binary
+*.docx binary
+*.rtf binary
+*.xls binary
+*.xlsx binary
