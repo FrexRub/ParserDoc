@@ -77,6 +77,16 @@ class CoreParsingTests(unittest.TestCase):
         self.assertIn(body, result.text)
         self.assertTrue(result.warnings)
 
+    def test_doc_parser_extracts_word_document_text_without_ole_noise(self) -> None:
+        fixture = next(Path("docs").glob("*.doc"))
+
+        result = DocParser().extract(fixture.read_bytes(), fixture.name, "application/msword")
+
+        self.assertIn("https://www.youtube.com/watch?v=nNh4rJR-1DM", result.text)
+        self.assertNotIn("HYPERLINK", result.text)
+        self.assertNotIn("Root Entry", result.text)
+        self.assertNotIn("Content_Types", result.text)
+
     def test_parse_document_returns_structured_response(self) -> None:
         result = parse_document("sample.txt", "text/plain", b"hello")
 
