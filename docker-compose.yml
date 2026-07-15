@@ -13,6 +13,12 @@ services:
       PARSERDOC_REQUEST_TIMEOUT_SECONDS: "${PARSERDOC_REQUEST_TIMEOUT_SECONDS:-120}"
     ports:
       - "${PORT:-8000}:8000"
+    expose:
+      - "8000"
+    networks:
+      parserdoc_net:
+        aliases:
+          - parserdoc
     healthcheck:
       test:
         - CMD
@@ -23,3 +29,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+networks:
+  parserdoc_net:
+    name: n8n-supabase-srfgnz
+    external: true
