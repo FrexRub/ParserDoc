@@ -9,11 +9,13 @@ import urllib.request
 import zipfile
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from unittest.mock import Mock
 from unittest.mock import patch
 
 from app.parsers.doc import DocParser
 from app.parsers.docx import DocxParser
 from app.parsers.rtf import RtfParser
+from app.parsers.spreadsheet import XlsParser
 from app.parsers.text import PlainTextParser
 from app.services.normalizer import normalize_text
 from serve import Handler, parse_document
@@ -37,6 +39,42 @@ def make_docx(text: str) -> bytes:
     return buffer.getvalue()
 
 
+def make_xlsx() -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr(
+            "xl/workbook.xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheets>
+    <sheet name="Admissions" sheetId="1" r:id="rId1" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>
+  </sheets>
+</workbook>
+""",
+        )
+        archive.writestr(
+            "xl/sharedStrings.xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <si><t>Program</t></si>
+  <si><t>Applicants</t></si>
+</sst>
+""",
+        )
+        archive.writestr(
+            "xl/worksheets/sheet1.xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>
+    <row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>
+    <row r="2"><c r="A2" t="inlineStr"><is><t>Postgraduate</t></is></c><c r="B2"><v>42</v></c></row>
+  </sheetData>
+</worksheet>
+""",
+        )
+    return buffer.getvalue()
+
+
 class CoreParsingTests(unittest.TestCase):
     def test_normalize_text_compacts_blank_lines(self) -> None:
         self.assertEqual(normalize_text("one\r\n\r\n\r\n two \t\n"), "one\n\n two")
@@ -52,6 +90,35 @@ class CoreParsingTests(unittest.TestCase):
 
         self.assertEqual(result.source_type, "docx")
         self.assertEqual(result.text, "Hello DOCX")
+
+    def test_xlsx_parser_extracts_spreadsheet_text(self) -> None:
+        result = XlsParser().extract(
+            make_xlsx(),
+            "sample.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+        self.assertEqual(result.source_type, "xlsx")
+        self.assertIn("[sheet] Admissions", result.text)
+        self.assertIn("Program | Applicants", result.text)
+        self.assertIn("Postgraduate | 42", result.text)
+
+    def test_xls_parser_uses_builtin_fallback_without_xlrd(self) -> None:
+        fixture = next(Path("docs").glob("*.xls"))
+        original_import = __import__
+
+        def import_without_xlrd(name, *args, **kwargs):
+            if name == "xlrd":
+                raise ModuleNotFoundError("No module named 'xlrd'")
+            return original_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", Mock(side_effect=import_without_xlrd)):
+            result = XlsParser().extract(fixture.read_bytes(), fixture.name, "application/vnd.ms-excel")
+
+        self.assertEqual(result.source_type, "xls")
+        self.assertIn("Номер поступающего", result.text)
+        self.assertIn("зачёт", result.text)
+        self.assertTrue(result.warnings)
 
     def test_rtf_parser_extracts_ansi_encoded_text(self) -> None:
         content = (
